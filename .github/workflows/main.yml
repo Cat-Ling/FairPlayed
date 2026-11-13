@@ -1,0 +1,52 @@
+name: Build IPA
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-ipa:
+    runs-on: macos-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build the iOS app
+        run: |
+          xcodebuild \
+            -project FairPlayed/FairPlayed.xcodeproj \
+            -target FairPlayed \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Create IPA payload
+        run: |
+          set -e
+          APP_PATH="build/DerivedData/Build/Products/Release-iphoneos/FairPlayed.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "Built app not found at $APP_PATH"
+            find build -maxdepth 5 -type d | head -200
+            exit 1
+          fi
+
+          mkdir -p build/ipa/Payload
+          cp -R "$APP_PATH" build/ipa/Payload/
+
+          # Make a plain IPA-style archive
+          (cd build/ipa && zip -qry ../FairPlayed.ipa.zip Payload)
+
+      - name: Upload IPA zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FairPlayed-IPA
+          path: build/FairPlayed.ipa.zip
+          if-no-files-found: error
+          retention-days: 14
